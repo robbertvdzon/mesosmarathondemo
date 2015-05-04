@@ -24,8 +24,7 @@ ADD run.sh /run.sh
 RUN chmod 755 /*.sh
 
 # copy initial html code
-COPY app/ /initialapp
-RUN cp -avr /initialapp/* /var/www/html
+COPY app/ /var/www/html
 
 EXPOSE 80
 WORKDIR /

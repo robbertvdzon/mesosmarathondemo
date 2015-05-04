@@ -1,4 +1,4 @@
-### Building a mesos cluster network, test scaling docker containers using digitalocean
+### Building a mesos cluster network, test scaling docker containers using DigitalOcean
 
 
 ----------
@@ -12,103 +12,110 @@ Mesos, Marathon, DigitalOcean
 Building a mesos cluster network, test scaling docker containers using digitalocean
   
 
-**Architecture picture:**  <br>
-![alt tag](https://raw.githubusercontent.com/robbertvdzon/contactdb.v2/master/contactdatabase2b-architecture.png)
-
-
-
-Step 1: Choose supplier for mesos/marathon
-------------------------------------------
-
-Cluster op google cloud:
-https://www.youtube.com/watch?v=hZNGST2vIds&feature=youtu.be
-op google of digitalocean:
-https://digitalocean.mesosphere.com
-
-digitalocean develop: 12ct per uur / 3 $ per dag = 90$ per maand
-digitalocean high avail: 30ct per uur 7$ per dag = 220$ per maand
-
-google develop: 56ct per uur / 13 $ per dag = 410$ per maand
-google high avail: 1,68ct per uur 40$ per dag = 1250$ per maand
-
-
 Step 1: create a test docker image to use for our test
 ------------------------------------------
+For our test we will use an apache docker image with a prime.php script which calculated all the prime numbers between 0 and 20.000. On an avarage system this will take about 500msec to calculate.
+We use this cpu-intensive call to test the effects of scaling the application to multiple nodes.
 
+The apache docker files are located in the "apache" subfolder of this project.
 
 Step 2: upload docker image to Dockerhub
 ------------------------------------------
+In order for this docker image to be used by our cluster, this docker images must be pushed to a docker repository.
+We will use dockerhub for this.
 
-op commandline:
-docker login 
-(username:robbertvdzon, passwd: lut...docker)
-docker push robbertvdzon/apache
+To upload a docker container, the following commands can be used (from within the \apache folder):
 
-2: Maak cluster aan
-ook ssh key genereren
-ook openvpn installeren
-test/bekijk 3 web pagina’s
+	docker build -t robbertvdzon/primetest .
+	docker login 
+	(enter your dockerhub credentials)
+	docker push robbertvdzon/primetest
 
-3: maak json file voor docker image
+Step 3: Create mesos/marathon clustor om DigitalOcean
+------------------------------------------
+We will use DigitalOcean to provide our mesos/marathon cluster.
+On DigitalOcean you can rent a cluster of machine for 12ct per hour for a development cluster (1 server and 3 client nodes), or 30ct for a highly available cluster (3 master and 7 client nodes).
 
-4: curl op windows installeren
+To start using this cluster, create an account at https://www.digitalocean.com and choose a cluster at https://digitalocean.mesosphere.com
 
-5: run app en test deze
-curl -X POST -H "Content-Type: application/json" http://10.132.27.35:8080/v2/apps -d@primedocker.json
+The first step is to provide an ssh-key.
+On windows this key can be created using puttygen.exe
 
-6: test scale
+After the key is filled in, press the "launch cluster" to start the cluster.
+Now, the cluster will be build and an email will be sended when the cluster is finished.
 
-7: install jmeter en configureer deze
+It takes about 10 minutes before the cluster is builder and ready to be used.
 
-8: test de call en vergelijk met scale-up en down
+Step 4: Create a vpn connection to the cluster
+------------------------------------------
+When the cluster is finished, you can open the overview page on digital ocean which shows the topology of the new cluster.
 
-9: als je wilt ssh naar een server:
-open de digital ocean console en voor elke node reset root passwd: ssh key lukt niet
-10: alle scripts en code in een github project 
-jmeter project
-curl commando’s
+In order to be able to push commands and docker images to the cluster, a vpn connection is needed.
 
+On the overview page, an openVPN client can be downloaded and the vpn connection details can be downloaded.
 
-
-11: test resultaten:
-users: 10/40
-latency :890-1180
-avarage: 1046
-connect-time: 100
-
-users: 10/20
-latency :880-1460
-avarage: 1105
-connect-time: 100
+When the connection is established, it is also possible to open the marathon/sonor and mesos links from the overview page.
 
 
-users: 10/10
-latency :880-1871
-avarage: 1088
-connect-time: 100
+Step 5: start our docker image on the cluster
+------------------------------------------
+To start a docker image on the cluster, a json file with details about the docker image must be created.
+This json file can be send to the cluster using a curl command.
 
-users: 10/5
-latency :880-2000
-avarage: 1072
-connect-time: 100
+For our docker container, the following json file can be created:
+ 
+	{
+	  "id": "primetest-webapp",
+	  "cmd": "/run.sh",
+	  "cpus": 0.5,
+	  "mem": 64.0,
+	  "instances": 1,
+	  "container": {
+	    "type": "DOCKER",
+	    "docker": {
+	      "image": "robbertvdzon/primetest",
+	      "network": "BRIDGE",
+	      "portMappings": [
+	        { "containerPort": 80, "hostPort": 0, "servicePort": 80, "protocol": "tcp" }
+	      ]
+	    }
+	  }
+	}
 
-users: 10/3
-latency :1100-1800
-avarage: 1500
-connect-time: 100
+To send this file to the clusted, you can use the following command:
 
-users: 10/1
-latency :2800-3480
-avarage: 3240 - 1350
-connect-time: 100
+	curl -X POST -H "Content-Type: application/json" http://[private-ip-of-master]:8080/v2/apps -d@primedocker.json
 
-users: 20/1
-latency :4700-5800
-avarage: 570
-connect-time: 100
+When this command succeeds, a docker container will be created and started on one of the client nodes.
 
-users: 30/1
-latency :4000-9500
-avarage: 7800	- 2930
-connect-time: 100
+Port 80 of the public ip address will be redirected to this docker container. 
 
+To this if the docker container is running, enter the following url in your browser: 
+
+	http://[public-ip]/prime.php
+
+Step 6: Start JMeter to measure the maximum load of the application
+------------------------------------------
+
+Download and unpack jmeter to any folder and launch it.
+
+There is a primetests.jmx test project which can be used to perform measurements.
+In the "JMeter Users" the amount of simultaneous users can be configured, along with the number of seconds in which they will be started.
+When running the test, the "View results in Table" can be used to see how many users can simultaneously call the prime function before the requests take too long.
+
+Note that the correct ip address has to be configured in the "HTTP Request Defaults" page.
+
+Step 7: Scale up the application
+------------------------------------------
+
+To scale up the application, login to the marathon web interface choose "scale" and select the number of instances that must be run.
+We can enter "3" here and check how that effects our measurements results.
+
+The system will directly adds two extra docker instances and will roundrobin the usage of them.
+ 
+Step 7: ssh to any of the nodes
+------------------------------------------
+I was not able to ssh to one of the nodes using putty on windows using the private ssh key.
+
+A workaround for this is to login to www.digitalocean.com and check the droplets (which are our nodes).
+Here we can reset the root password (which will be emailed to you) so you can use that root password to login instead of using the private ssh key.

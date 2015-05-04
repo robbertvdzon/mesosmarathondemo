@@ -1,5 +1,5 @@
 {
-  "id": "bridged-webapp",
+  "id": "primetest-webapp",
   "cmd": "/run.sh",
   "cpus": 0.5,
   "mem": 64.0,
